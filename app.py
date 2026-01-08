@@ -127,8 +127,10 @@ col1, col2 = st.columns([2, 1])
 
 with col1:
     st.subheader("📈 Proyeksi Saldo Bulanan")
+    # PERBAIKAN: Menghapus use_container_width=True (default plotly biasanya sudah responsif)
+    # Jika masih error, bisa coba tambahkan width="stretch" jika library mendukung
     fig = px.line(df, x="Bulan", y="Saldo Akhir", markers=True, title="Trend Tabungan Revan 2026")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig) 
 
 with col2:
     st.subheader("Summary")
@@ -146,6 +148,7 @@ st.subheader("📋 Tabel Detail Keuangan")
 def color_negative_red(val):
     return "color: red" if val < 0 else "color: green"
 
+# PERBAIKAN: Mengganti use_container_width=True menjadi width="stretch"
 st.dataframe(
     df.style.format({
         "Saldo Awal": "Rp {:,.0f}",
@@ -153,5 +156,5 @@ st.dataframe(
         "Pengeluaran": "Rp {:,.0f}",
         "Saldo Akhir": "Rp {:,.0f}"
     }).applymap(color_negative_red, subset=["Saldo Akhir"]),
-    use_container_width=True
+    width="stretch"
 )
