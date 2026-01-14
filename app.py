@@ -134,55 +134,51 @@ df_wishlist = pd.DataFrame(st.session_state["wishlist"])
 st.title("💎 Financial Dashboard Revan 2026")
 st.markdown("---")
 
-tab_dash, tab_manage, tab_detail = st.tabs(["📊 Dashboard Overview", "📝 Manage Data", "📋 Detailed Data"])
+# =========================
+# Manage Data Section
+# =========================
+st.subheader("📝 Kelola Data")
+c1, c2 = st.columns(2)
 
-with tab_manage:
-    c1, c2 = st.columns(2)
+with c1:
+    st.markdown("#### 🔁 Pengeluaran Rutin")
+    st.info("Edit langsung di tabel. Centang 'active' untuk mengaktifkan.")
+    edited_rutin = st.data_editor(
+        df_rutin,
+        num_rows="dynamic",
+        column_config={
+            "desc": "Keterangan",
+            "amount": st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d"),
+            "active": st.column_config.CheckboxColumn("Aktif?", default=True)
+        },
+        key="editor_rutin",
+        width="stretch"
+    )
     
-    with c1:
-        st.subheader("🔁 Pengeluaran Rutin")
-        st.info("Edit langsung di tabel. Centang 'active' untuk mengaktifkan.")
-        edited_rutin = st.data_editor(
-            df_rutin,
-            num_rows="dynamic",
-            column_config={
-                "desc": "Keterangan",
-                "amount": st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d"),
-                "active": st.column_config.CheckboxColumn("Aktif?", default=True)
-            },
-            key="editor_rutin",
-            use_container_width=True
-        )
-        
-    with c2:
-        st.subheader("🎁 Wishlist & Goal")
-        st.info("Rencanakan keinginanmu di sini.")
-        edited_wishlist = st.data_editor(
-            df_wishlist,
-            num_rows="dynamic",
-            column_config={
-                "name": "Nama Barang",
-                "price": st.column_config.NumberColumn("Harga (Rp)", format="Rp %d"),
-                "month": st.column_config.SelectboxColumn("Bulan Rencana", options=MONTHS),
-                "enabled": st.column_config.CheckboxColumn("Beli?", default=True)
-            },
-            key="editor_wishlist",
-            use_container_width=True
-        )
+with c2:
+    st.markdown("#### 🎁 Wishlist & Goal")
+    st.info("Rencanakan keinginanmu di sini.")
+    edited_wishlist = st.data_editor(
+        df_wishlist,
+        num_rows="dynamic",
+        column_config={
+            "name": "Nama Barang",
+            "price": st.column_config.NumberColumn("Harga (Rp)", format="Rp %d"),
+            "month": st.column_config.SelectboxColumn("Bulan Rencana", options=MONTHS),
+            "enabled": st.column_config.CheckboxColumn("Beli?", default=True)
+        },
+        key="editor_wishlist",
+        width="stretch"
+    )
 
-    # Sync back to session state ONLY if changed (Streamlit handles auto-sync via key, but we need to ensure persistence logic if needed)
-    # Actually, st.data_editor with key automatically updates session_state[key], but we want to update the original list dicts
-    # for our calculation logic to stay clean.
+# Sync back to session state
+if not edited_rutin.equals(df_rutin):
+    st.session_state["rutin_items"] = edited_rutin.to_dict("records")
+    st.rerun()
     
-    # We'll rely on the data_editor's return value for calculations in this run.
-    # And we update the persistent store for next run.
-    if not edited_rutin.equals(df_rutin):
-        st.session_state["rutin_items"] = edited_rutin.to_dict("records")
-        st.rerun()
-        
-    if not edited_wishlist.equals(df_wishlist):
-        st.session_state["wishlist"] = edited_wishlist.to_dict("records")
-        st.rerun()
+if not edited_wishlist.equals(df_wishlist):
+    st.session_state["wishlist"] = edited_wishlist.to_dict("records")
+    st.rerun()
 
 # =========================
 # Calculations
@@ -229,76 +225,77 @@ for month in MONTHS:
 df_calc = pd.DataFrame(data)
 
 # =========================
-# Dashboard View
+# Dashboard Section
 # =========================
-with tab_dash:
-    # Top Metrics
-    tot_inc = df_calc["Income"].sum()
-    tot_exp = df_calc["TotalOut"].sum()
-    tot_wish = df_calc["Wishlist"].sum()
-    final_bal = df_calc["EndBalance"].iloc[-1]
-    
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Pemasukan", f"Rp {tot_inc/1e6:,.1f} Jt")
-    m2.metric("Total Pengeluaran", f"Rp {tot_exp/1e6:,.1f} Jt")
-    m3.metric("Total Wishlist", f"Rp {tot_wish/1e6:,.1f} Jt")
-    m4.metric("Sisa Akhir Tahun", f"Rp {final_bal:,.0f}", delta="Net Worth" if final_bal > 0 else "Deficit")
-    
-    st.markdown("### 📈 Visualisasi Keuangan")
-    
-    g1, g2 = st.columns([1.5, 1])
-    
-    with g1:
-        # Stacked Bar Chart for Expenses
-        fig_bar = px.bar(
-            df_calc, 
-            x="Bulan", 
-            y=["Rutin", "Wishlist"], 
-            title="Komposisi Pengeluaran Bulanan",
-            color_discrete_map={"Rutin": "#3b82f6", "Wishlist": "#f43f5e"},
-            template="plotly_dark"
-        )
-        fig_bar.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            legend_title_text="Tipe"
-        )
-        st.plotly_chart(fig_bar, width="stretch")
+st.markdown("---")
+st.subheader("📊 Dashboard Overview")
+# Top Metrics
+tot_inc = df_calc["Income"].sum()
+tot_exp = df_calc["TotalOut"].sum()
+tot_wish = df_calc["Wishlist"].sum()
+final_bal = df_calc["EndBalance"].iloc[-1]
 
-    with g2:
-        # Area Chart for Balance
-        fig_area = px.area(
-            df_calc,
-            x="Bulan",
-            y="EndBalance",
-            title="Proyeksi Tabungan",
-            markers=True,
-            color_discrete_sequence=["#10b981"],
-            template="plotly_dark"
-        )
-        fig_area.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            yaxis_title="Saldo (Rp)"
-        )
-        st.plotly_chart(fig_area, width="stretch") # Using correct param
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Total Pemasukan", f"Rp {tot_inc/1e6:,.1f} Jt")
+m2.metric("Total Pengeluaran", f"Rp {tot_exp/1e6:,.1f} Jt")
+m3.metric("Total Wishlist", f"Rp {tot_wish/1e6:,.1f} Jt")
+m4.metric("Sisa Akhir Tahun", f"Rp {final_bal:,.0f}", delta="Net Worth" if final_bal > 0 else "Deficit")
 
-# =========================
-# Detail View
-# =========================
-with tab_detail:
-    st.subheader("📄 Rincian Per Bulan")
-    
-    # Styling the dataframe
-    st.dataframe(
-        df_calc.style.format({
-            "Income": "Rp {:,.0f}",
-            "Rutin": "Rp {:,.0f}",
-            "Wishlist": "Rp {:,.0f}",
-            "TotalOut": "Rp {:,.0f}",
-            "EndBalance": "Rp {:,.0f}"
-        }),
-        use_container_width=True,
-        height=500
+st.markdown("### 📈 Visualisasi Keuangan")
+
+g1, g2 = st.columns([1.5, 1])
+
+with g1:
+    # Stacked Bar Chart for Expenses
+    fig_bar = px.bar(
+        df_calc, 
+        x="Bulan", 
+        y=["Rutin", "Wishlist"], 
+        title="Komposisi Pengeluaran Bulanan",
+        color_discrete_map={"Rutin": "#3b82f6", "Wishlist": "#f43f5e"},
+        template="plotly_dark"
     )
-    
+    fig_bar.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend_title_text="Tipe"
+    )
+    st.plotly_chart(fig_bar, width="stretch")
+
+with g2:
+    # Area Chart for Balance
+    fig_area = px.area(
+        df_calc,
+        x="Bulan",
+        y="EndBalance",
+        title="Proyeksi Tabungan",
+        markers=True,
+        color_discrete_sequence=["#10b981"],
+        template="plotly_dark"
+    )
+    fig_area.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        yaxis_title="Saldo (Rp)"
+    )
+    st.plotly_chart(fig_area, width="stretch")
+
+# =========================
+# Detail Section
+# =========================
+st.markdown("---")
+st.subheader("📄 Rincian Per Bulan")
+
+# Styling the dataframe
+st.dataframe(
+    df_calc.style.format({
+        "Income": "Rp {:,.0f}",
+        "Rutin": "Rp {:,.0f}",
+        "Wishlist": "Rp {:,.0f}",
+        "TotalOut": "Rp {:,.0f}",
+        "EndBalance": "Rp {:,.0f}"
+    }),
+    width="stretch",
+    height=500
+)
+
