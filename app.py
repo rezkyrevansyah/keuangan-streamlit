@@ -1,24 +1,93 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 # =========================
-# App Config
+# App Config & Styling
 # =========================
-st.set_page_config(page_title="Financial Planner Revan 2026", layout="wide")
+st.set_page_config(
+    page_title="Financial Planner Revan 2026",
+    page_icon="💰",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-st.title("📊 Financial Planner Revan 2026")
-st.write("Aplikasi untuk simulasi budget, wishlist, dan tabungan akhir tahun.")
+# Custom CSS for Premium Look
+st.markdown("""
+<style>
+    /* Global Styles */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    
+    html, body, [class*="css"]  {
+        font-family: 'Inter', sans-serif;
+    }
 
-# --- KONSTANTA ---
+    /* Metric Cards */
+    div[data-testid="stMetric"] {
+        background-color: #1E293B;
+        border: 1px solid #334155;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s;
+    }
+    div[data-testid="stMetric"]:hover {
+        transform: translateY(-2px);
+        border-color: #38bdf8;
+    }
+    div[data-testid="stMetric"] label {
+        color: #94a3b8;
+        font-size: 0.9rem;
+    }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+        color: #f8fafc;
+        font-weight: 700;
+        font-size: 1.8rem;
+    }
+
+    /* Headers */
+    h1, h2, h3 {
+        color: #f8fafc;
+        font-weight: 700;
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        border-bottom: 1px solid #334155;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: #0f172a;
+        border-radius: 8px 8px 0 0;
+        border: 1px solid transparent;
+        color: #94a3b8;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #1e293b;
+        color: #38bdf8;
+        border-color: #334155;
+        border-bottom-color: #1e293b;
+    }
+
+    /* Expander */
+    .streamlit-expanderHeader {
+        background-color: #1e293b;
+        border-radius: 8px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# =========================
+# Constants & Init
+# =========================
 MONTHS = [
     "Januari", "Februari", "Maret", "April", "Mei", "Juni",
     "Juli", "Agustus", "September", "Oktober", "November", "Desember"
 ]
 
-# =========================
-# Session State Init
-# =========================
 if "wishlist" not in st.session_state:
     st.session_state["wishlist"] = [
         {"name": "Samsung Tab S10 FE", "price": 6000000, "month": "Maret", "enabled": True},
@@ -27,155 +96,120 @@ if "wishlist" not in st.session_state:
         {"name": "Trip Malang", "price": 2500000, "month": "Juni", "enabled": False},
     ]
 
-# Pengeluaran rutin itemized (baru)
 if "rutin_items" not in st.session_state:
     st.session_state["rutin_items"] = [
-        {"desc": "Kirim ke Ibu", "amount": 2000000},
-        {"desc": "Kebutuhan Pribadi", "amount": 1840000},
+        {"desc": "Kirim ke Ibu", "amount": 2000000, "active": True},
+        {"desc": "Kebutuhan Pribadi", "amount": 1840000, "active": True},
     ]
 
 # =========================
-# Sidebar - Basic Config
+# Sidebar Controls
 # =========================
-st.sidebar.header("Konfigurasi Dasar")
-initial_balance = st.sidebar.number_input("Saldo Awal (Jan)", value=6400000, step=100000)
-monthly_salary = st.sidebar.number_input("Gaji Bulanan", value=5200000, step=100000)
-thr_amount = st.sidebar.number_input("Nominal THR (Cair Maret)", value=1800000, step=100000)
+with st.sidebar:
+    st.title("⚙️ Konfigurasi")
+    
+    with st.expander("💰 Pemasukan", expanded=True):
+        initial_balance = st.number_input("Saldo Awal (Jan)", value=6400000, step=100000, format="%d")
+        monthly_salary = st.number_input("Gaji Bulanan", value=5200000, step=100000, format="%d")
+        thr_amount = st.number_input("THR (Maret)", value=1800000, step=100000, format="%d")
 
-# =========================
-# Sidebar - Pengeluaran Rutin (itemized)
-# =========================
-st.sidebar.header("Pengeluaran Rutin (Bulanan)")
-st.sidebar.caption("Tambah pengeluaran rutin: isi nominal & keterangan, lalu Enter atau klik tombol Add.")
-
-with st.sidebar.form("form_add_rutin", clear_on_submit=True):
-    new_amount = st.number_input("Nominal", min_value=0, value=0, step=50000)
-    new_desc = st.text_input("Keterangan", placeholder="Contoh: Internet, Cicilan, Makan, dll")
-    add = st.form_submit_button("➕ Add Pengeluaran")
-
-    if add:
-        if new_amount <= 0:
-            st.sidebar.warning("Nominal harus > 0.")
-        elif not new_desc.strip():
-            st.sidebar.warning("Keterangan wajib diisi.")
-        else:
-            st.session_state["rutin_items"].append({"desc": new_desc.strip(), "amount": int(new_amount)})
-            st.sidebar.success("Pengeluaran rutin ditambahkan.")
-            st.rerun()
-
-# List pengeluaran rutin + delete
-st.sidebar.markdown("**Daftar Pengeluaran Rutin**")
-if len(st.session_state["rutin_items"]) == 0:
-    st.sidebar.info("Belum ada pengeluaran rutin.")
-else:
-    total_rutin_default = sum(x["amount"] for x in st.session_state["rutin_items"])
-    st.sidebar.write(f"Total rutin (default/bulan): **Rp {total_rutin_default:,.0f}**".replace(",", "."))
-
-    for idx, it in enumerate(st.session_state["rutin_items"]):
-        c1, c2, c3 = st.sidebar.columns([1.4, 1, 0.6])
-        with c1:
-            st.write(it["desc"])
-        with c2:
-            st.write(f"Rp {it['amount']:,.0f}".replace(",", "."))
-        with c3:
-            if st.button("🗑️", key=f"del_rutin_{idx}", help="Hapus item ini"):
-                st.session_state["rutin_items"].pop(idx)
-                st.rerun()
+    st.divider()
+    
+    with st.expander("🗓️ Override Bulanan"):
+        st.write("Override total pengeluaran rutin untuk bulan tertentu.")
+        override_month = st.selectbox("Bulan", MONTHS, index=0)
+        override_amount = st.number_input("Nominal (0 = Off)", value=0, step=100000)
 
 # =========================
-# Sidebar - Override Pengeluaran per Bulan (baru)
+# Data Management (Logic)
 # =========================
-st.sidebar.divider()
-st.sidebar.header("Override Pengeluaran Rutin (Per Bulan)")
-st.sidebar.caption("Pilih bulan yang ingin dioverride. Jika nominal = 0, override dianggap tidak aktif.")
 
-override_month = st.sidebar.selectbox("Pilih Bulan Override", MONTHS, index=0)
-override_amount = st.sidebar.number_input(
-    "Nominal Override",
-    min_value=0,
-    value=0,          # <= sesuai request: default 0
-    step=100000
-)
+# 1. Processing Dataframes for Editors
+df_rutin = pd.DataFrame(st.session_state["rutin_items"])
+df_wishlist = pd.DataFrame(st.session_state["wishlist"])
 
 # =========================
-# Sidebar - Wishlist (CRUD + tombol mass action)
+# Main Layout
 # =========================
-st.sidebar.divider()
-st.sidebar.header("Wishlist Management")
-st.sidebar.caption("Anda bisa tambah, edit, hapus item. Ada juga tombol mass-action.")
+st.title("💎 Financial Dashboard Revan 2026")
+st.markdown("---")
 
-wl_c1, wl_c2, wl_c3 = st.sidebar.columns(3)
-with wl_c1:
-    if st.sidebar.button("➕ Tambah"):
-        st.session_state["wishlist"].append({
-            "name": "Item Baru",
-            "price": 1000000,
-            "month": "Desember",
-            "enabled": True
-        })
+tab_dash, tab_manage, tab_detail = st.tabs(["📊 Dashboard Overview", "📝 Manage Data", "📋 Detailed Data"])
+
+with tab_manage:
+    c1, c2 = st.columns(2)
+    
+    with c1:
+        st.subheader("🔁 Pengeluaran Rutin")
+        st.info("Edit langsung di tabel. Centang 'active' untuk mengaktifkan.")
+        edited_rutin = st.data_editor(
+            df_rutin,
+            num_rows="dynamic",
+            column_config={
+                "desc": "Keterangan",
+                "amount": st.column_config.NumberColumn("Nominal (Rp)", format="Rp %d"),
+                "active": st.column_config.CheckboxColumn("Aktif?", default=True)
+            },
+            key="editor_rutin",
+            use_container_width=True
+        )
+        
+    with c2:
+        st.subheader("🎁 Wishlist & Goal")
+        st.info("Rencanakan keinginanmu di sini.")
+        edited_wishlist = st.data_editor(
+            df_wishlist,
+            num_rows="dynamic",
+            column_config={
+                "name": "Nama Barang",
+                "price": st.column_config.NumberColumn("Harga (Rp)", format="Rp %d"),
+                "month": st.column_config.SelectboxColumn("Bulan Rencana", options=MONTHS),
+                "enabled": st.column_config.CheckboxColumn("Beli?", default=True)
+            },
+            key="editor_wishlist",
+            use_container_width=True
+        )
+
+    # Sync back to session state ONLY if changed (Streamlit handles auto-sync via key, but we need to ensure persistence logic if needed)
+    # Actually, st.data_editor with key automatically updates session_state[key], but we want to update the original list dicts
+    # for our calculation logic to stay clean.
+    
+    # We'll rely on the data_editor's return value for calculations in this run.
+    # And we update the persistent store for next run.
+    if not edited_rutin.equals(df_rutin):
+        st.session_state["rutin_items"] = edited_rutin.to_dict("records")
+        st.rerun()
+        
+    if not edited_wishlist.equals(df_wishlist):
+        st.session_state["wishlist"] = edited_wishlist.to_dict("records")
         st.rerun()
 
-with wl_c2:
-    if st.sidebar.button("🧹 Hapus Semua"):
-        st.session_state["wishlist"] = []
-        st.rerun()
-
-with wl_c3:
-    if st.sidebar.button("⛔ Nonaktifkan Semua"):
-        for i in range(len(st.session_state["wishlist"])):
-            st.session_state["wishlist"][i]["enabled"] = False
-        st.rerun()
-
-st.sidebar.divider()
-
-# Loop READ & UPDATE & DELETE wishlist
-wishlist_items = st.session_state["wishlist"]
-for i, item in enumerate(wishlist_items):
-    with st.sidebar.expander(f"#{i+1} {item['name']}", expanded=item['enabled']):
-        new_name = st.text_input("Nama Barang", value=item['name'], key=f"name_{i}")
-        new_enabled = st.checkbox("Aktifkan?", value=item['enabled'], key=f"enable_{i}")
-        new_price = st.number_input("Harga", value=int(item['price']), step=100000, key=f"price_{i}")
-
-        try:
-            month_index = MONTHS.index(item['month'])
-        except ValueError:
-            month_index = 0
-
-        new_month = st.selectbox("Bulan Beli", MONTHS, index=month_index, key=f"month_{i}")
-
-        # Update session state
-        st.session_state["wishlist"][i]["name"] = new_name
-        st.session_state["wishlist"][i]["enabled"] = new_enabled
-        st.session_state["wishlist"][i]["price"] = int(new_price)
-        st.session_state["wishlist"][i]["month"] = new_month
-
-        if st.button("🗑️ Hapus Item", key=f"del_{i}"):
-            st.session_state["wishlist"].pop(i)
-            st.rerun()
-
 # =========================
-# Perhitungan
+# Calculations
 # =========================
+# Recalculate based on currently edited data
+rutin_list = edited_rutin.to_dict("records")
+wishlist_list = edited_wishlist.to_dict("records")
+
+total_rutin_default = sum(x["amount"] for x in rutin_list if x.get("active", True))
+
 data = []
 current_balance = initial_balance
-
-total_rutin_default = sum(x["amount"] for x in st.session_state["rutin_items"])
 
 for month in MONTHS:
     income = monthly_salary
     if month == "Maret":
         income += thr_amount
 
-    # Default pengeluaran rutin
+    # Rutin
     exp_rutin = total_rutin_default
-
-    # Apply override jika bulan cocok dan nominal > 0
+    # Override check
     if (month == override_month) and (override_amount > 0):
         exp_rutin = override_amount
 
-    # Hitung total wishlist bulan ini
+    # Wishlist
     wishlist_cost = 0
-    for item in st.session_state["wishlist"]:
+    for item in wishlist_list:
         if item.get("enabled") and item.get("month") == month:
             wishlist_cost += int(item.get("price", 0))
 
@@ -185,85 +219,86 @@ for month in MONTHS:
 
     data.append({
         "Bulan": month,
-        "Saldo Awal": balance_before,
-        "Pemasukan": income,
+        "Income": income,
         "Rutin": exp_rutin,
         "Wishlist": wishlist_cost,
-        "Total Pengeluaran": total_exp,
-        "Saldo Akhir": current_balance
+        "TotalOut": total_exp,
+        "EndBalance": current_balance
     })
 
-df = pd.DataFrame(data)
+df_calc = pd.DataFrame(data)
 
 # =========================
-# Dashboard Summary Cards
+# Dashboard View
 # =========================
-st.markdown("### 📝 Ringkasan Tahun 2026")
-col1, col2, col3, col4 = st.columns(4)
+with tab_dash:
+    # Top Metrics
+    tot_inc = df_calc["Income"].sum()
+    tot_exp = df_calc["TotalOut"].sum()
+    tot_wish = df_calc["Wishlist"].sum()
+    final_bal = df_calc["EndBalance"].iloc[-1]
+    
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Pemasukan", f"Rp {tot_inc/1e6:,.1f} Jt")
+    m2.metric("Total Pengeluaran", f"Rp {tot_exp/1e6:,.1f} Jt")
+    m3.metric("Total Wishlist", f"Rp {tot_wish/1e6:,.1f} Jt")
+    m4.metric("Sisa Akhir Tahun", f"Rp {final_bal:,.0f}", delta="Net Worth" if final_bal > 0 else "Deficit")
+    
+    st.markdown("### 📈 Visualisasi Keuangan")
+    
+    g1, g2 = st.columns([1.5, 1])
+    
+    with g1:
+        # Stacked Bar Chart for Expenses
+        fig_bar = px.bar(
+            df_calc, 
+            x="Bulan", 
+            y=["Rutin", "Wishlist"], 
+            title="Komposisi Pengeluaran Bulanan",
+            color_discrete_map={"Rutin": "#3b82f6", "Wishlist": "#f43f5e"},
+            template="plotly_dark"
+        )
+        fig_bar.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            legend_title_text="Tipe"
+        )
+        st.plotly_chart(fig_bar, width="stretch")
 
-total_income_year = df["Pemasukan"].sum()
-total_expense_year = df["Total Pengeluaran"].sum()
-total_wishlist_year = df["Wishlist"].sum()
-final_balance = df["Saldo Akhir"].iloc[-1]
-
-with col1:
-    st.metric("Total Pemasukan", f"Rp {total_income_year/1000000:,.1f} Jt", delta="Setahun")
-with col2:
-    st.metric("Total Pengeluaran", f"Rp {total_expense_year/1000000:,.1f} Jt", delta="-Flow", delta_color="inverse")
-with col3:
-    st.metric("Total Biaya Wishlist", f"Rp {total_wishlist_year/1000000:,.1f} Jt", delta="Lifestyle", delta_color="off")
-with col4:
-    val_color = "normal" if final_balance > 0 else "inverse"
-    st.metric("Sisa Tabungan (Des)", f"Rp {final_balance:,.0f}".replace(",", "."), delta="Net Worth", delta_color=val_color)
-
-st.divider()
+    with g2:
+        # Area Chart for Balance
+        fig_area = px.area(
+            df_calc,
+            x="Bulan",
+            y="EndBalance",
+            title="Proyeksi Tabungan",
+            markers=True,
+            color_discrete_sequence=["#10b981"],
+            template="plotly_dark"
+        )
+        fig_area.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            yaxis_title="Saldo (Rp)"
+        )
+        st.plotly_chart(fig_area, width="stretch") # Using correct param
 
 # =========================
-# Charts
+# Detail View
 # =========================
-c1, c2 = st.columns([1.5, 1])
-
-with c1:
-    st.subheader("📊 Analisis Pengeluaran (Rutin vs Wishlist)")
-    fig_bar = px.bar(
-        df,
-        x="Bulan",
-        y=["Rutin", "Wishlist"],
-        title="Komposisi Pengeluaran Bulanan",
-        color_discrete_map={"Rutin": "#3498db", "Wishlist": "#e74c3c"},
-        labels={"value": "Nominal (Rp)", "variable": "Jenis Pengeluaran"}
+with tab_detail:
+    st.subheader("📄 Rincian Per Bulan")
+    
+    # Styling the dataframe
+    st.dataframe(
+        df_calc.style.format({
+            "Income": "Rp {:,.0f}",
+            "Rutin": "Rp {:,.0f}",
+            "Wishlist": "Rp {:,.0f}",
+            "TotalOut": "Rp {:,.0f}",
+            "EndBalance": "Rp {:,.0f}"
+        }),
+        use_container_width=True,
+        height=500
     )
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-with c2:
-    st.subheader("📈 Trend Saldo Tabungan")
-    fig_line = px.line(
-        df,
-        x="Bulan",
-        y="Saldo Akhir",
-        markers=True,
-        title="Pertumbuhan Aset",
-        color_discrete_sequence=["#2ecc71"]
-    )
-    fig_line.update_traces(fill="tozeroy")
-    st.plotly_chart(fig_line, use_container_width=True)
-
-# =========================
-# Table Detail
-# =========================
-st.subheader("📋 Tabel Detail Keuangan")
-
-def color_negative_red(val):
-    return "color: red" if val < 0 else "color: green"
-
-st.dataframe(
-    df.style.format({
-        "Saldo Awal": "Rp {:,.0f}",
-        "Pemasukan": "Rp {:,.0f}",
-        "Rutin": "Rp {:,.0f}",
-        "Wishlist": "Rp {:,.0f}",
-        "Total Pengeluaran": "Rp {:,.0f}",
-        "Saldo Akhir": "Rp {:,.0f}"
-    }).map(color_negative_red, subset=["Saldo Akhir"]),
-    width="stretch"
-)
+    
